@@ -14,12 +14,12 @@
 
 		.button:focus,
 		.button:hover {
-		  background-color: #007bff;
+		  background-color: #fc0585;
 		  color: White;
 		}
 
 		.titlehead {
-		  background-color: #003263;  
+		  background-color: #0471db;  
 		  border-radius: 5px;
 		  color: white;
 		  padding: .5em;
@@ -30,29 +30,15 @@
 		  font-family: system-ui;
 		}
 
-		.titlehead:focus,
-		.titlehead:hover {
-		  background-color: #007bff;
-		  color: White;
-		}
+		
 
-		.bg {
-		  /* The image used */
-		  background-image: url("ps4.jpg");
 
-		  
-
-		  /* Center and scale the image nicely */
-		  background-position: center;
-		  background-repeat: no-repeat;
-		  background-size: cover;
-		}
 	</style>
 	<head>
 		<title>PS4 Jailbreak 9.00</title>
 		<script>
 			function loadcomplete() {
-				document.getElementById("progress").innerHTML=sessionStorage.Queue+" Loaded Successfully !!";
+				document.getElementById("progress").innerHTML=sessionStorage.Queue+" با موفقیت بارگیری شد ";
 				sessionStorage.Queue="";
 			}
 		</script>
@@ -65,11 +51,11 @@
 	<body class="bg">
 		<script>
 			window.onload = function(e){if(sessionStorage.Queue==null){sessionStorage.Queue="";}else if(sessionStorage.Queue!=""){executependingqueue(sessionStorage.Queue);}};
-			window.applicationCache.ondownloading=function(){document.getElementById("progress").innerHTML="Page Caching Started!!"};
-			window.applicationCache.onprogress=function(a){document.getElementById("progress").innerHTML="Caching Status: "+(Math.round(100*(a.loaded/a.total)))+"% Completed"};
-			window.applicationCache.oncached=function(){document.getElementById("progress").innerHTML="Page Cached Successfully!!";setTimeout(function(){document.getElementById("progress").innerHTML="Turn Off the Internet & Reopen the Page to Run the Exploit!!"; }, 1500);};
+			window.applicationCache.ondownloading=function(){document.getElementById("progress").innerHTML="ذخیره صفحه شروع شد"};
+			window.applicationCache.onprogress=function(a){document.getElementById("progress").innerHTML="وضعیت ذخیره سازی: "+(Math.round(100*(a.loaded/a.total)))+"% تکمیل شدن"};
+			window.applicationCache.oncached=function(){document.getElementById("progress").innerHTML="صفحه با موفقیت ذخیره شد";setTimeout(function(){document.getElementById("progress").innerHTML="اینترنت را خاموش کنید و صفحه را دوباره باز کنید تا اکسپلویت اجرا شود"; }, 1500);};
 		</script>
-		<h1 id="progress" class="titlehead">PS4 Jailbreak 9.00</h1><hr><br>
+		<h1 id="progress" class="titlehead">PS4 </h1><hr><br>
 		<input type="hidden" id="psip" value="localhost"/>
 		<div>
 			<table align="center" style="width:600px;margin-top:30px;">
